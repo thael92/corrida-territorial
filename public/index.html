@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corrida Territorial</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2A3443"/>
+</head>
+<body>
+    <div id="login-screen" class="screen active">
+        <div class="login-box">
+            <h1>Corrida Territorial</h1>
+            <p>Conquiste sua cidade, uma corrida de cada vez.</p>
+            <input type="text" id="player-name" placeholder="Digite seu nome" maxlength="15">
+            <button id="join-button">Entrar no Jogo</button>
+        </div>
+    </div>
+
+    <div id="game-screen" class="screen">
+        <div id="map"></div>
+        <div id="hud">
+            <div id="player-info">
+                <span id="hud-player-name"></span>
+            </div>
+            <div id="ranking">
+                <h3>🏆 Ranking</h3>
+                <ul id="ranking-list"></ul>
+            </div>
+            <button id="start-race-btn">Iniciar Corrida</button>
+        </div>
+        <div id="notification" class="hidden"></div>
+    </div>
+
+    <!-- API do Google Maps - Substitua SUA_CHAVE_API pela sua chave -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBz9QRGMbHuHu8lcyTCJPxGLpvWKpqaknA&libraries=geometry,drawing"></script>
+    <!-- Socket.IO Client -->
+    <script src="/socket.io/socket.io.js"></script>
+    <!-- Nosso App -->
+    <script src="app.js"></script>
+</body>
+</html>

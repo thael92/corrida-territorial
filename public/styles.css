@@ -1,0 +1,153 @@
+/* Estilos gerais e animações */
+:root {
+    --primary-color: #4CAF50; /* Verde Corrida */
+    --secondary-color: #FFC107; /* Amarelo Conquista */
+    --bg-dark: #2A3443;
+    --text-light: #f4f4f4;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+}
+
+.screen {
+    width: 100vw;
+    height: 100vh;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.screen.active {
+    display: flex;
+}
+
+/* Tela de Login */
+.login-box {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 40px;
+    border-radius: 10px;
+    text-align: center;
+    animation: fadeIn 1s;
+}
+
+.login-box h1 {
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+#player-name {
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid var(--primary-color);
+    background: #333;
+    color: white;
+    width: 80%;
+    margin: 20px 0;
+}
+
+#join-button {
+    padding: 12px 25px;
+    border: none;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: transform 0.2s;
+}
+
+#join-button:hover {
+    transform: scale(1.05);
+}
+
+/* Tela do Jogo */
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+#hud {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(42, 52, 67, 0.9);
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    z-index: 10;
+    max-width: 250px;
+}
+
+#ranking h3 {
+    margin-top: 0;
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--primary-color);
+    padding-bottom: 5px;
+}
+
+#ranking-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#ranking-list li {
+    padding: 5px 0;
+    font-size: 14px;
+}
+
+#start-race-btn {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    border: none;
+    background-color: var(--secondary-color);
+    color: #333;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+/* Notificação de Conquista */
+#notification {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--secondary-color);
+    color: var(--bg-dark);
+    padding: 15px 30px;
+    border-radius: 25px;
+    font-size: 1.2em;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.6);
+    animation: slideDown 0.5s ease-out forwards, fadeOut 4s 1s forwards;
+}
+
+#notification.hidden {
+    display: none;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideDown {
+    from { top: -100px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
