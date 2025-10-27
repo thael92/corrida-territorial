@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 // Armazenamento em memória (para simplificar, sem banco de dados por enquanto)
 let players = {}; // Guarda os dados dos jogadores
 let territories = []; // Guarda os territórios conquistados
+let territoryIdCounter = 0; // Contador para IDs de territórios
 
 io.on('connection', (socket) => {
     console.log(`Novo jogador conectado: ${socket.id}`);
@@ -47,7 +48,9 @@ io.on('connection', (socket) => {
     // Quando um jogador conquista um território (rota)
     socket.on('conquerTerritory', (territoryData) => {
         if (players[socket.id]) {
+            territoryIdCounter++;
             const newTerritory = {
+                id: territoryIdCounter, // Adiciona o ID único ao território
                 ownerId: socket.id,
                 ownerName: players[socket.id].name,
                 color: players[socket.id].color,
@@ -61,6 +64,30 @@ io.on('connection', (socket) => {
             io.emit('territoryConquered', newTerritory);
             // Envia uma notificação de conquista apenas para o jogador que conquistou
             socket.emit('conquestNotification', { territoryName: territoryData.name });
+        }
+    });
+
+    // Quando um jogador vence um desafio e toma um território
+    socket.on('challengeWon', ({ territoryId }) => {
+        const challenger = players[socket.id];
+        const territory = territories.find(t => t.id === territoryId);
+
+        if (challenger && territory && territory.ownerId !== challenger.id) {
+            const oldOwner = players[territory.ownerId];
+
+            // Atualiza contagem de conquistas
+            if (oldOwner) {
+                oldOwner.conquests = Math.max(0, oldOwner.conquests - 1);
+            }
+            challenger.conquests++;
+
+            // Transfere a propriedade
+            territory.ownerId = challenger.id;
+            territory.ownerName = challenger.name;
+            territory.color = challenger.color;
+
+            // Notifica todos os clientes sobre a mudança de dono e atualização do ranking
+            io.emit('territoryOwnerChanged', { territory, players });
         }
     });
 
