@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playerNameInput = document.getElementById('player-name');
     const mapElement = document.getElementById('map');
     const rankingList = document.getElementById('ranking-list');
+    const hudDistance = document.getElementById('hud-distance');
     const startRaceBtn = document.getElementById('start-race-btn');
     const notificationElement = document.getElementById('notification');
     
@@ -22,6 +23,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Variáveis da corrida
     let raceInProgress = false;
     let currentRacePath = [];
+    let totalDistance = 0;
+    let isFirstPosition = true; // Flag para garantir que o primeiro ponto seja o de partida
     let racePathPolyline;
     let watchId;
 
@@ -32,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
     joinButton.addEventListener('click', () => {
         const name = playerNameInput.value.trim();
         if (name) {
-            const playerColor = getRandomColor();
+            const playerColor = getRandomColor(); // myPlayerColor will be set by socket.on('currentGameState') or 'newPlayer'
             socket.emit('joinGame', { name, color: playerColor });
             
             loginScreen.classList.remove('active');
@@ -65,20 +68,23 @@ document.addEventListener('DOMContentLoaded', () => {
     startRaceBtn.addEventListener('click', () => {
         if (raceInProgress) return; // Previne múltiplos cliques
 
-        // Limpa o desenho da rota anterior, se houver
-        if (racePathPolyline) {
-            racePathPolyline.setMap(null);
-        }
-
+        // Resetar o estado da corrida para uma nova
+        resetRaceState(); // Chama para limpar qualquer estado anterior
+        
+        // Inicia a nova corrida
         raceInProgress = true;
-        currentRacePath = [];
+        isFirstPosition = true; // Garante que o primeiro ponto será o de partida
         startLocationTracking();
+
+        // Atualiza UI
         startRaceBtn.textContent = 'Corrida em andamento...';
         startRaceBtn.style.backgroundColor = '#c5c5c5';
         startRaceBtn.style.cursor = 'not-allowed';
         showNotification('Corrida iniciada! Boa sorte!', 'info');
+        
         // Desativa o modo de desenho manual durante a corrida
         drawingManager.setDrawingMode(null);
+        drawingManager.setOptions({ drawingControl: false }); // Esconde os controles de desenho
     });
 
     // --- RASTREAMENTO E GEOLOCALIZAÇÃO ---
@@ -86,6 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (navigator.geolocation) {
             watchId = navigator.geolocation.watchPosition(
                 (position) => {
+                    if (!raceInProgress) {
+                        // Se a corrida foi resetada por algum motivo, para de rastrear
+                        navigator.geolocation.clearWatch(watchId);
+                        return;
+                    }
                     const pos = {
                         lat: position.coords.latitude,
                         lng: position.coords.longitude,
@@ -93,8 +104,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Atualiza a posição do marcador do jogador
                     // e adiciona o ponto ao trajeto da corrida
-                    currentRacePath.push(pos);
-                    updateRacePathPolyline();
+                    if (isFirstPosition) {
+                        currentRacePath = [pos]; // Define o primeiro ponto como o de partida
+                        isFirstPosition = false;
+                    } else {
+                        currentRacePath.push(pos);
+                    }
 
 
                     if (!playerMarker) {
@@ -103,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             map: map,
                             icon: {
                                 path: google.maps.SymbolPath.CIRCLE,
-                                scale: 8,
+                                scale: 10, // Marcador um pouco maior para o jogador atual
                                 fillColor: players[myPlayerId]?.color || '#1E90FF',
                                 fillOpacity: 1,
                                 strokeColor: 'white',
@@ -111,10 +126,17 @@ document.addEventListener('DOMContentLoaded', () => {
                             },
                         });
                         map.setCenter(pos);
-                        // O primeiro ponto é o ponto de partida
-                        currentRacePath = [pos];
                     } else {
                         playerMarker.setPosition(pos);
+                    }
+
+                    // Atualiza a polyline do percurso
+                    updateRacePathPolyline();
+
+                    // Calcula e exibe a distância em tempo real
+                    if (currentRacePath.length > 1) {
+                        totalDistance = google.maps.geometry.spherical.computeLength(racePathPolyline.getPath()) / 1000; // em km
+                        hudDistance.textContent = `Distância: ${totalDistance.toFixed(2)} km`;
                     }
 
                     // Envia a nova posição para o servidor
@@ -122,13 +144,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Verifica se o jogador fechou o percurso
                     checkIfRaceIsComplete();
                 },
-                () => {
-                    alert('Erro: O serviço de geolocalização falhou.');
+                (error) => {
+                    console.error('Erro de geolocalização:', error);
+                    alert('Erro: O serviço de geolocalização falhou. Por favor, verifique as permissões do navegador.');
+                    resetRaceState(); // Reseta o estado da corrida em caso de erro
                 },
-                { enableHighAccuracy: true }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Opções para melhor precisão e resposta
             );
         } else {
             alert('Erro: Seu navegador não suporta geolocalização.');
+            resetRaceState(); // Reseta o estado se a geolocalização não for suportada
         }
     }
 
@@ -137,7 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
             racePathPolyline = new google.maps.Polyline({
                 path: currentRacePath,
                 geodesic: true,
-                strokeColor: '#FFC107', // Amarelo para o trajeto atual
+                strokeColor: players[myPlayerId]?.color || '#FFC107', // Usa a cor do jogador para o trajeto
                 strokeOpacity: 1.0,
                 strokeWeight: 4,
                 map: map
@@ -162,19 +187,40 @@ document.addEventListener('DOMContentLoaded', () => {
         if (distance < 25) {
             navigator.geolocation.clearWatch(watchId); // Para de rastrear
             raceInProgress = false;
-
-            const territoryName = prompt("Percurso completo! Dê um nome para este território:", "Minha Conquista");
+ 
+            const territoryName = prompt(`Percurso de ${totalDistance.toFixed(2)} km completo! Dê um nome para este território:`, "Minha Conquista");
             if (territoryName) {
                 socket.emit('conquerTerritory', { name: territoryName, path: currentRacePath });
+                // A notificação de sucesso será acionada pelo evento 'conquestNotification' do servidor
+            } else {
+                // Se o usuário cancelar o prompt, apenas reseta a corrida
+                showNotification('Conquista cancelada.', 'info');
             }
-            
-            // Reseta o botão
-            startRaceBtn.textContent = 'Iniciar Corrida';
-            startRaceBtn.style.backgroundColor = 'var(--secondary-color)';
-            startRaceBtn.style.cursor = 'pointer';
+ 
+            resetRaceState(); // Reseta o estado da corrida para poder iniciar uma nova
         }
     }
-    
+
+    // Função para resetar o estado da corrida
+    function resetRaceState() {
+        if (watchId) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+        raceInProgress = false;
+        currentRacePath = [];
+        totalDistance = 0;
+        hudDistance.textContent = 'Distância: 0.00 km';
+        if (racePathPolyline) {
+            racePathPolyline.setMap(null);
+            racePathPolyline = null;
+        }
+        startRaceBtn.textContent = 'Iniciar Corrida';
+        startRaceBtn.style.backgroundColor = 'var(--secondary-color)';
+        startRaceBtn.style.cursor = 'pointer';
+        drawingManager.setOptions({ drawingControl: true }); // Mostra os controles de desenho novamente
+    }
+
     // --- LÓGICA DE DESENHO DE TERRITÓRIO ---
     function setupDrawingManager() {
         drawingManager = new google.maps.drawing.DrawingManager({
@@ -192,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drawingManager.setMap(map);
 
         google.maps.event.addListener(drawingManager, 'polylinecomplete', (polyline) => {
+            // Se uma corrida estiver em andamento, não permite o desenho manual
             if (raceInProgress) return; // Não permite desenho manual durante a corrida
 
             const territoryName = prompt("Dê um nome para esta rota conquistada:", "Minha Rota");
@@ -258,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     socket.on('conquestNotification', ({ territoryName }) => {
         showNotification(`🏆 Território "${territoryName}" conquistado!`);
-        conquestSound.play();
+        conquestSound.play().catch(e => console.log("Erro ao tocar som:", e)); // Adiciona catch para evitar erro de Promise não tratada
     });
 
     // --- FUNÇÕES AUXILIARES DA UI ---
@@ -281,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 map: map,
                 icon: {
                     path: google.maps.SymbolPath.CIRCLE,
-                    scale: 7,
+                    scale: 8, // Marcador um pouco menor para outros jogadores
                     fillColor: player.color,
                     fillOpacity: 0.8,
                     strokeColor: 'black',
