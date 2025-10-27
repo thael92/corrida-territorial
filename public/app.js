@@ -18,6 +18,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let territoryPolygons = [];
     let drawingManager;
     let myPlayerId;
+    
+    // Variáveis da corrida
+    let raceInProgress = false;
+    let currentRacePath = [];
+    let racePathPolyline;
+    let watchId;
 
     // Sons
     const conquestSound = new Audio('https://www.soundjay.com/buttons/sounds/button-7.mp3'); // Som de exemplo
@@ -57,16 +63,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LÓGICA DA CORRIDA ---
     startRaceBtn.addEventListener('click', () => {
+        if (raceInProgress) return; // Previne múltiplos cliques
+
+        // Limpa o desenho da rota anterior, se houver
+        if (racePathPolyline) {
+            racePathPolyline.setMap(null);
+        }
+
+        raceInProgress = true;
+        currentRacePath = [];
         startLocationTracking();
         startRaceBtn.textContent = 'Corrida em andamento...';
-        startRaceBtn.disabled = true;
+        startRaceBtn.style.backgroundColor = '#c5c5c5';
+        startRaceBtn.style.cursor = 'not-allowed';
         showNotification('Corrida iniciada! Boa sorte!', 'info');
+        // Desativa o modo de desenho manual durante a corrida
+        drawingManager.setDrawingMode(null);
     });
 
     // --- RASTREAMENTO E GEOLOCALIZAÇÃO ---
     function startLocationTracking() {
         if (navigator.geolocation) {
-            navigator.geolocation.watchPosition(
+            watchId = navigator.geolocation.watchPosition(
                 (position) => {
                     const pos = {
                         lat: position.coords.latitude,
@@ -74,6 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
 
                     // Atualiza a posição do marcador do jogador
+                    // e adiciona o ponto ao trajeto da corrida
+                    currentRacePath.push(pos);
+                    updateRacePathPolyline();
+
+
                     if (!playerMarker) {
                         playerMarker = new google.maps.Marker({
                             position: pos,
@@ -88,12 +111,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             },
                         });
                         map.setCenter(pos);
+                        // O primeiro ponto é o ponto de partida
+                        currentRacePath = [pos];
                     } else {
                         playerMarker.setPosition(pos);
                     }
 
                     // Envia a nova posição para o servidor
                     socket.emit('updatePosition', pos);
+                    // Verifica se o jogador fechou o percurso
+                    checkIfRaceIsComplete();
                 },
                 () => {
                     alert('Erro: O serviço de geolocalização falhou.');
@@ -104,11 +131,53 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Erro: Seu navegador não suporta geolocalização.');
         }
     }
+
+    function updateRacePathPolyline() {
+        if (!racePathPolyline) {
+            racePathPolyline = new google.maps.Polyline({
+                path: currentRacePath,
+                geodesic: true,
+                strokeColor: '#FFC107', // Amarelo para o trajeto atual
+                strokeOpacity: 1.0,
+                strokeWeight: 4,
+                map: map
+            });
+        } else {
+            racePathPolyline.setPath(currentRacePath);
+        }
+    }
+
+    function checkIfRaceIsComplete() {
+        if (currentRacePath.length < 3) return; // Precisa de pelo menos 3 pontos para formar uma área
+
+        const startPoint = currentRacePath[0];
+        const currentPoint = currentRacePath[currentRacePath.length - 1];
+
+        const distance = google.maps.geometry.spherical.computeDistanceBetween(
+            new google.maps.LatLng(startPoint),
+            new google.maps.LatLng(currentPoint)
+        );
+
+        // Se o jogador estiver a menos de 25 metros do início, considera o percurso fechado
+        if (distance < 25) {
+            navigator.geolocation.clearWatch(watchId); // Para de rastrear
+            raceInProgress = false;
+
+            const territoryName = prompt("Percurso completo! Dê um nome para este território:", "Minha Conquista");
+            if (territoryName) {
+                socket.emit('conquerTerritory', { name: territoryName, path: currentRacePath });
+            }
+            
+            // Reseta o botão
+            startRaceBtn.textContent = 'Iniciar Corrida';
+            startRaceBtn.style.backgroundColor = 'var(--secondary-color)';
+            startRaceBtn.style.cursor = 'pointer';
+        }
+    }
     
     // --- LÓGICA DE DESENHO DE TERRITÓRIO ---
     function setupDrawingManager() {
         drawingManager = new google.maps.drawing.DrawingManager({
-            drawingMode: google.maps.drawing.OverlayType.POLYLINE,
             drawingControl: true,
             drawingControlOptions: {
                 position: google.maps.ControlPosition.TOP_CENTER,
@@ -123,6 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
         drawingManager.setMap(map);
 
         google.maps.event.addListener(drawingManager, 'polylinecomplete', (polyline) => {
+            if (raceInProgress) return; // Não permite desenho manual durante a corrida
+
             const territoryName = prompt("Dê um nome para esta rota conquistada:", "Minha Rota");
             if (territoryName) {
                 const path = polyline.getPath().getArray().map(p => ({ lat: p.lat(), lng: p.lng() }));
